@@ -1,0 +1,140 @@
+version: "3.8"
+
+# Docker Swarm does not build images. Build and push these two images first,
+# then replace the image names below with addresses from your registry.
+services:
+  service-a:
+    image: healthchecks-demo/service-a:1.0
+    ports:
+      - target: 8080
+        published: 8081
+        protocol: tcp
+        mode: ingress
+    configs:
+      - source: service_a_health_config
+        target: /app/healthCheck.json
+    networks: [ healthchecks-demo ]
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/live" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 5s
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+
+  service-b:
+    image: healthchecks-demo/service-b:1.0
+    ports:
+      - target: 8080
+        published: 8082
+        protocol: tcp
+        mode: ingress
+    configs:
+      - source: service_b_health_config
+        target: /app/healthCheck.json
+    networks: [ healthchecks-demo ]
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/live" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      # Пока entrypoint ждет readiness Service A, порт Service B еще не открыт.
+      # Период старта должен быть длиннее StartupWait.TimeoutSeconds.
+      start_period: 150s
+    deploy:
+      replicas: 2
+      restart_policy:
+        # Если ожидание Service A завершилось по timeout, entrypoint выходит с 1,
+        # и Swarm создает новую задачу Service B, которая начинает ждать заново.
+        condition: on-failure
+        delay: 5s
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+
+  service-a-db-1:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: service_a_primary
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - service-a-db-1-data:/var/lib/postgresql/data
+    networks: [ healthchecks-demo ]
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d service_a_primary" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [ "node.role == manager" ]
+
+  service-b-db-1:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: service_b_primary
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - service-b-db-1-data:/var/lib/postgresql/data
+    networks: [ healthchecks-demo ]
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d service_b_primary" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [ "node.role == manager" ]
+
+  service-a-redis:
+    image: redis:7-alpine
+    networks: [ healthchecks-demo ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  service-b-redis:
+    image: redis:7-alpine
+    networks: [ healthchecks-demo ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+configs:
+  service_a_health_config:
+    file: ./src/ServiceA/healthCheck.json
+  service_b_health_config:
+    file: ./src/ServiceB/healthCheck.json
+
+networks:
+  healthchecks-demo:
+    driver: overlay
+
+volumes:
+  service-a-db-1-data:
+  service-b-db-1-data:

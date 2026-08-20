@@ -1,0 +1,58 @@
+{
+  "ExternalResources": {
+    "PostgreSql": {
+      "ConnectionString": "Host=service-a-db-1;Port=5432;Database=service_a_primary;Username=postgres;Password=postgres;Timeout=2;Command Timeout=2"
+    },
+    "Redis": {
+      "ConnectionString": "service-a-redis:6379,abortConnect=false,connectTimeout=2000"
+    }
+  },
+  "HealthChecks": {
+    "Service": {
+      "ServiceId": "service-a",
+      "Description": "Health of Service A",
+      "Version": "1.0",
+      "ReleaseId": "local"
+    },
+    "Endpoints": {
+      "Live": {
+        "Disabled": false,
+        "Url": "/health/live"
+      },
+      "Ready": {
+        "Disabled": false,
+        "Url": "/health/ready"
+      },
+      "Detailed": {
+        "Disabled": false,
+        "Url": "/health/detailed"
+      },
+      "Cache": {
+        "Disabled": false,
+        "Url": "/health/cache"
+      },
+      "Database": {
+        "Disabled": false,
+        "Url": "/health/database"
+      }
+    },
+    "Dependencies": [
+      {
+        "Type": "PostgreSql",
+        "Name": "database",
+        "ConnectionString": "Host=service-a-db-1;Port=5432;Database=service_a_primary;Username=postgres;Password=postgres;Timeout=2;Command Timeout=2",
+        "ComponentId": "service-a-db-1",
+        "ComponentType": "datastore",
+        "Tags": [ "readiness", "database", "critical" ]
+      },
+      {
+        "Type": "Redis",
+        "Name": "redis-cache",
+        "ConnectionString": "service-a-redis:6379,abortConnect=false,connectTimeout=2000",
+        "ComponentId": "service-a-redis",
+        "ComponentType": "datastore",
+        "Tags": [ "readiness", "cache", "critical" ]
+      }
+    ]
+  }
+}

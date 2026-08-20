@@ -1,0 +1,64 @@
+{
+  "ExternalResources": {
+    "PostgreSql": {
+      "ConnectionString": "Host=service-b-db-1;Port=5432;Database=service_b_primary;Username=postgres;Password=postgres;Timeout=2;Command Timeout=2"
+    },
+    "Redis": {
+      "ConnectionString": "service-b-redis:6379,abortConnect=false,connectTimeout=2000"
+    }
+  },
+  "HealthChecks": {
+    "Service": {
+      "ServiceId": "service-b",
+      "Description": "Health of Service B",
+      "Version": "1.0",
+      "ReleaseId": "local"
+    },
+    "Endpoints": {
+      "Live": "/health/live",
+      "Ready": "/health/ready",
+      "Detailed": "/health"
+    },
+    "Dependencies": [
+      {
+        "Type": "PostgreSql",
+        "Name": "database",
+        "ComponentId": "service-b-db-1",
+        "ComponentType": "datastore",
+        "FailureStatus": "Unhealthy",
+        "TimeoutSeconds": 3,
+        "Tags": [ "readiness", "database", "critical" ]
+      },
+      {
+        "Type": "Redis",
+        "Name": "redis-cache",
+        "ComponentId": "service-b-redis",
+        "ComponentType": "datastore",
+        "FailureStatus": "Unhealthy",
+        "TimeoutSeconds": 3,
+        "Tags": [ "readiness", "cache", "critical" ]
+      },
+      {
+        "Type": "Http",
+        "Name": "service-a",
+        "ComponentId": "service-a",
+        "ComponentType": "component",
+        "FailureStatus": "Unhealthy",
+        "TimeoutSeconds": 2,
+        "Tags": [ "readiness", "http", "critical" ],
+        "Http": {
+          "Url": "http://service-a:8080/health/ready",
+          "Method": "GET",
+          "ExpectedStatusCodes": [ 200 ],
+          "UserAgent": "healthchecks-demo-service-b",
+          "StartupWait": {
+            "Enabled": true,
+            "TimeoutSeconds": 120,
+            "RetryDelaySeconds": 2,
+            "RequestTimeoutSeconds": 5
+          }
+        }
+      }
+    ]
+  }
+}

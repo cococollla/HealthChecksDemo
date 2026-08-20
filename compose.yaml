@@ -1,0 +1,93 @@
+name: healthchecks-demo
+
+services:
+  service-a:
+    build:
+      context: .
+      dockerfile: src/ServiceA/Dockerfile
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./src/ServiceA/healthCheck.json:/app/healthCheck.json:ro
+    depends_on:
+      service-a-db-1:
+        condition: service_healthy
+      service-a-redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/live" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  service-b:
+    build:
+      context: .
+      dockerfile: src/ServiceB/Dockerfile
+    restart: on-failure
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./src/ServiceB/healthCheck.json:/app/healthCheck.json:ro
+    depends_on:
+      service-a:
+        condition: service_healthy
+      service-b-db-1:
+        condition: service_healthy
+      service-b-redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/live" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 150s
+
+  service-a-db-1:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: service_a_primary
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - service-a-db-1-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d service_a_primary" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  service-b-db-1:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: service_b_primary
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - service-b-db-1-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d service_b_primary" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  service-a-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  service-b-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  service-a-db-1-data:
+  service-b-db-1-data:
