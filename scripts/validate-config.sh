@@ -9,29 +9,33 @@ for config in "$service_a_config" "$service_b_config"; do
   jq --exit-status '
     def validCommonCheck:
       (.Name | length > 0)
-      and (.ComponentId | length > 0)
-      and (.ComponentType | length > 0)
-      and (.TimeoutSeconds > 0)
       and (.Tags | length > 0)
-      and (
-        .FailureStatus as $failureStatus
-        | ["Healthy", "Degraded", "Unhealthy"]
-        | index($failureStatus) != null
-      )
-      and (has("ConnectionString") | not);
+      and (.ComponentId | length > 0)
+      and (.ComponentType | length > 0);
+
+    def validEndpoint:
+      if (.Disabled // false) == true
+      then true
+      else (.Url | type == "string") and (.Url | startswith("/"))
+      end;
 
     (.HealthChecks.Service.ServiceId | length > 0)
     and (.ExternalResources.PostgreSql.ConnectionString | length > 0)
     and (.ExternalResources.Redis.ConnectionString | length > 0)
-    and (.HealthChecks.Endpoints.Live | startswith("/"))
-    and (.HealthChecks.Endpoints.Ready | startswith("/"))
-    and (.HealthChecks.Endpoints.Detailed | startswith("/"))
+    and (
+      .HealthChecks.Endpoints
+      | to_entries
+      | all(.[]; (.value | validEndpoint))
+    )
     and (
       [
         .HealthChecks.Endpoints.Live,
         .HealthChecks.Endpoints.Ready,
-        .HealthChecks.Endpoints.Detailed
+        .HealthChecks.Endpoints.Detailed,
+        .HealthChecks.Endpoints.Cache?,
+        .HealthChecks.Endpoints.Database?
       ]
+      | map(select(. != null and ((.Disabled // false) == false)) | .Url)
       | length == (unique | length)
     )
     and (
@@ -39,15 +43,24 @@ for config in "$service_a_config" "$service_b_config"; do
       | ($dependencies | length > 0)
         and all($dependencies[];
           validCommonCheck
-          and (.Type as $type | ["PostgreSql", "Redis", "Http"] | index($type) != null)
+          and (.Type as $type | ["PostgreSql", "Redis", "Http", "Service"] | index($type) != null)
           and (
             if .Type == "Http"
             then
-              (.Http.Url | test("^https?://"))
+              (.TimeoutSeconds > 0)
+              and (
+                .FailureStatus as $failureStatus
+                | ["Healthy", "Degraded", "Unhealthy"]
+                | index($failureStatus) != null
+              )
+              and (.Http.Url | test("^https?://"))
               and (.Http.Method | length > 0)
               and (.Http.ExpectedStatusCodes | length > 0)
+            elif .Type == "Service"
+            then
+              (.Endpoint | test("^https?://"))
             else
-              (has("Http") | not)
+              true
             end
           )
         )

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using HealthChecksDemo.HealthChecks;
 using Npgsql;
 using ServiceB;
 
@@ -10,10 +10,17 @@ builder.Configuration
     .AddJsonFile("healthCheck.json", optional: false, reloadOnChange: false)
     .AddEnvironmentVariables();
 
-var healthSettings = builder.Configuration
-    .GetRequiredSection(HealthCheckSettings.SectionName)
-    .Get<HealthCheckSettings>()
+var healthSection = builder.Configuration.GetRequiredSection(HealthCheckSettings.SectionName);
+var healthSettings = healthSection.Get<HealthCheckSettings>()
     ?? throw new InvalidOperationException("Секция HealthChecks не найдена.");
+
+healthSettings = healthSettings with
+{
+    Dependencies = healthSection
+        .GetSection(nameof(HealthCheckSettings.Dependencies))
+        .GetChildren()
+        .ToArray()
+};
 
 healthSettings.Validate();
 
@@ -41,29 +48,6 @@ app.MapGet("/", () => Results.Ok(new
     message = "Service B is running."
 }));
 
-// Liveness не проверяет БД и Service A, поэтому отказ зависимости
-// не приводит к автоматическому перезапуску контейнера Service B.
-app.MapHealthChecks(healthSettings.Endpoints.Live, new HealthCheckOptions
-{
-    Predicate = _ => false
-});
-
-// Readiness выполняет проверки, которые помечены тегом readiness.
-app.MapHealthChecks(healthSettings.Endpoints.Ready, new HealthCheckOptions
-{
-    Predicate = registration => registration.Tags.Contains("readiness")
-});
-
-// Detailed endpoint выполняет все проверки и сериализует стандартный HealthReport.
-app.MapHealthChecks(healthSettings.Endpoints.Detailed, new HealthCheckOptions
-{
-    Predicate = _ => true,
-    ResponseWriter = (context, report) =>
-        HealthResponseWriter.WriteAsync(
-            context,
-            report,
-            healthSettings.Service,
-            healthSettings.Dependencies)
-});
+app.UseConfiguredHealthChecks(healthSettings);
 
 app.Run();

@@ -1,9 +1,8 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace ServiceA;
+namespace HealthChecksDemo.HealthChecks;
 
-// Универсальная проверка HTTP-зависимости. Она регистрируется только тогда,
-// когда в Dependencies появляется элемент с Type = Http.
 internal sealed class HttpDependencyHealthCheck(
     IHttpClientFactory httpClientFactory,
     ExternalApplicationHealthCheckSettings settings) : IHealthCheck
@@ -14,7 +13,7 @@ internal sealed class HttpDependencyHealthCheck(
     {
         try
         {
-            using var request = new HttpRequestMessage( HttpMethod.Get, settings.Endpoint);
+            using var request = new HttpRequestMessage(HttpMethod.Get, settings.Endpoint);
 
             var client = httpClientFactory.CreateClient(settings.Name);
             using var response = await client.SendAsync(

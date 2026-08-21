@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using HealthChecksDemo.HealthChecks;
 using Npgsql;
 using ServiceA;
 
@@ -50,50 +50,6 @@ app.MapGet("/", () => Results.Ok(new
     message = "Service A is running."
 }));
 
-// Liveness намеренно не запускает проверки зависимостей. Если БД недоступна,
-// Docker Swarm не должен бесконечно перезапускать исправный процесс API.
-MapHealthChecksIfEnabled(healthSettings.Endpoints.Live, new HealthCheckOptions
-{
-    Predicate = _ => false
-});
-
-// Readiness выполняет только проверки с тегом readiness.
-MapHealthChecksIfEnabled(healthSettings.Endpoints.Ready, new HealthCheckOptions
-{
-    Predicate = registration => registration.Tags.Contains("readiness")
-});
-
-// Detailed endpoint выполняет все проверки. ResponseWriter получает стандартный
-// HealthReport от ASP.NET Core и превращает его в удобный JSON.
-MapHealthChecksIfEnabled(healthSettings.Endpoints.Detailed, new HealthCheckOptions
-{
-    Predicate = _ => true,
-    ResponseWriter = (context, report) =>
-        HealthResponseWriter.WriteAsync(context, report, healthSettings.Service)
-});
-
-MapHealthChecksIfEnabled(healthSettings.Endpoints.Cache, new HealthCheckOptions
-{
-    Predicate = registration => registration.Tags.Contains("cache"),
-    ResponseWriter = (context, report) =>
-        HealthResponseWriter.WriteAsync(context, report, healthSettings.Service)
-});
-
-MapHealthChecksIfEnabled(healthSettings.Endpoints.Database, new HealthCheckOptions
-{
-    Predicate = registration => registration.Tags.Contains("database"),
-    ResponseWriter = (context, report) =>
-        HealthResponseWriter.WriteAsync(context, report, healthSettings.Service)
-});
+app.UseConfiguredHealthChecks(healthSettings);
 
 app.Run();
-
-void MapHealthChecksIfEnabled(EndpointOptions endpoint, HealthCheckOptions options)
-{
-    if (endpoint.Disabled)
-    {
-        return;
-    }
-
-    app.MapHealthChecks(endpoint.Url!, options);
-}

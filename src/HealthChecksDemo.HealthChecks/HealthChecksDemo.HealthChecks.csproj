@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>HealthChecksDemo.HealthChecks</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>HealthChecksDemo</Authors>
+    <Description>Reusable ASP.NET Core health checks for PostgreSQL, Redis, and HTTP dependencies.</Description>
+    <PackageTags>aspnetcore;healthchecks;postgresql;redis;http</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Npgsql" Version="10.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.7.4" />
+  </ItemGroup>
+</Project>

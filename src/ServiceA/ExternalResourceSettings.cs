@@ -1,7 +1,6 @@
 namespace ServiceA;
 
 // Это конфигурация подключений приложения, а не параметры health checks.
-// В реальном сервисе эти настройки обычно уже существуют отдельно.
 public sealed record ExternalResourceSettings
 {
     public const string SectionName = "ExternalResources";
@@ -12,35 +11,26 @@ public sealed record ExternalResourceSettings
 
     public void Validate()
     {
-        PostgreSql.Validate();
-        Redis.Validate();
+        if (string.IsNullOrWhiteSpace(PostgreSql.ConnectionString))
+        {
+            throw new InvalidOperationException(
+                "ExternalResources:PostgreSql:ConnectionString обязателен.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Redis.ConnectionString))
+        {
+            throw new InvalidOperationException(
+                "ExternalResources:Redis:ConnectionString обязателен.");
+        }
     }
 }
 
 public sealed record PostgreSqlConnectionSettings
 {
     public string ConnectionString { get; init; } = string.Empty;
-
-    public void Validate()
-    {
-        if (string.IsNullOrWhiteSpace(ConnectionString))
-        {
-            throw new InvalidOperationException(
-                "ExternalResources:PostgreSql:ConnectionString обязателен.");
-        }
-    }
 }
 
 public sealed record RedisConnectionSettings
 {
     public string ConnectionString { get; init; } = string.Empty;
-
-    public void Validate()
-    {
-        if (string.IsNullOrWhiteSpace(ConnectionString))
-        {
-            throw new InvalidOperationException(
-                "ExternalResources:Redis:ConnectionString обязателен.");
-        }
-    }
 }

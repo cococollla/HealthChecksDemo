@@ -1,12 +1,11 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Npgsql;
 
-namespace ServiceB;
+namespace HealthChecksDemo.HealthChecks;
 
-// Проверка подтверждает и подключение к PostgreSQL, и выполнение простого запроса.
 internal sealed class PostgreSqlHealthCheck(
     NpgsqlDataSource dataSource,
-    DependencyHealthCheckSettings settings) : IHealthCheck
+    PostgresHealthCheckSettings settings) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,

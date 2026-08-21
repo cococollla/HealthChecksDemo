@@ -1,12 +1,10 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace ServiceA;
+namespace HealthChecksDemo.HealthChecks;
 
-// Microsoft рекомендует строить пользовательский JSON из HealthReport.
-// RFC draft учитывается только частично: используется media type
-// application/health+json и дополнительные сведения о компонентах.
-internal static class HealthResponseWriter
+public static class HealthResponseWriter
 {
     private static readonly JsonSerializerOptions SerializerOptions =
         new(JsonSerializerDefaults.Web)
@@ -21,15 +19,13 @@ internal static class HealthResponseWriter
     {
         context.Response.ContentType = "application/health+json";
 
-        // Статусы не преобразуются: клиент получает нативные значения ASP.NET Core
-        // Healthy, Degraded или Unhealthy.
         var response = new
         {
             status = report.Status.ToString(),
             service = new
             {
                 id = service.ServiceId,
-                description = service.Description,
+                description = service.Description
             },
             totalDurationMs = Math.Round(report.TotalDuration.TotalMilliseconds, 2),
             checks = report.Entries.ToDictionary(
@@ -40,9 +36,7 @@ internal static class HealthResponseWriter
                     description = entry.Value.Description,
                     durationMs = Math.Round(entry.Value.Duration.TotalMilliseconds, 2),
                     tags = entry.Value.Tags.OrderBy(tag => tag),
-                    // Метаданные добавляются из конфигурации даже для готовых
-                    // проверок вроде AddRedis, которые сами Data не заполняют.
-                    data = entry.Value.Data,
+                    data = entry.Value.Data
                 })
         };
 
