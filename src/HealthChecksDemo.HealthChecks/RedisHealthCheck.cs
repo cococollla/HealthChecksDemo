@@ -7,7 +7,7 @@ namespace HealthChecksDemo.HealthChecks;
 internal sealed class RedisHealthCheck(
     RedisHealthCheckSettings settings) : IHealthCheck
 {
-    private static readonly ConcurrentDictionary<string, Lazy<Task<ConnectionMultiplexer>>> Connections =
+    private static readonly ConcurrentDictionary<string, IConnectionMultiplexer> Connections =
         new(StringComparer.Ordinal);
 
     public async Task<HealthCheckResult> CheckHealthAsync(
@@ -16,7 +16,26 @@ internal sealed class RedisHealthCheck(
     {
         try
         {
-            var connection = await GetConnectionAsync(cancellationToken);
+            IConnectionMultiplexer? connection = null;
+
+            if (!Connections.TryGetValue(settings.ConnectionString, out connection))
+            {
+                try
+                {
+                    var connectionMultiplexerTask = ConnectionMultiplexer.ConnectAsync(settings.ConnectionString);
+                    connection = await TimeoutAsync(connectionMultiplexerTask, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return Failure(context, "Истекло время ожидания подключения к Redis.");
+                }
+
+                if (!Connections.TryAdd(settings.ConnectionString, connection))
+                {
+                    connection.Dispose();
+                    connection = Connections[settings.ConnectionString];
+                }
+            }
 
             foreach (var endPoint in connection.GetEndPoints(configuredOnly: true))
             {
@@ -69,34 +88,14 @@ internal sealed class RedisHealthCheck(
         }
     }
 
-    private async Task<IConnectionMultiplexer> GetConnectionAsync(CancellationToken cancellationToken)
-    {
-        var lazyConnection = Connections.GetOrAdd(
-            settings.ConnectionString,
-            static connectionString => new Lazy<Task<ConnectionMultiplexer>>(
-                () => ConnectionMultiplexer.ConnectAsync(connectionString)));
-
-        try
-        {
-            return await lazyConnection.Value.WaitAsync(cancellationToken);
-        }
-        catch
-        {
-            Connections.TryRemove(settings.ConnectionString, out _);
-            throw;
-        }
-    }
-
     private void ResetCachedConnection()
     {
-        if (!Connections.TryRemove(settings.ConnectionString, out var lazyConnection)
-            || !lazyConnection.IsValueCreated
-            || !lazyConnection.Value.IsCompletedSuccessfully)
+        if (!Connections.TryRemove(settings.ConnectionString, out var connection))
         {
             return;
         }
 
-        lazyConnection.Value.Result.Dispose();
+        connection.Dispose();
     }
 
     private HealthCheckResult Failure(
@@ -115,4 +114,23 @@ internal sealed class RedisHealthCheck(
             ["componentId"] = settings.ComponentId,
             ["componentType"] = settings.ComponentType
         };
+
+    private static async Task<ConnectionMultiplexer> TimeoutAsync(
+        Task<ConnectionMultiplexer> task,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var completedTask = await Task
+            .WhenAny(task, Task.Delay(Timeout.Infinite, timeoutCts.Token))
+            .ConfigureAwait(false);
+
+        if (completedTask == task)
+        {
+            timeoutCts.Cancel();
+            return await task.ConfigureAwait(false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new OperationCanceledException();
+    }
 }
